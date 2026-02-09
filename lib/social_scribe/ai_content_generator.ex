@@ -91,13 +91,49 @@ defmodule SocialScribe.AIContentGenerator do
         #{meeting_prompt}
         """
 
-        case call_gemini(prompt) do
-          {:ok, response} ->
-            parse_hubspot_suggestions(response)
+        # TODO: mock suggestion response
 
-          {:error, reason} ->
-            {:error, reason}
-        end
+        mock_suggestions = [
+          %{
+            field: "firstname",
+            value: "Brian",
+            context: "Brian mentioned his first name",
+            timestamp: "00:00"
+          },
+          %{
+            field: "lastname",
+            value: "Smiths",
+            context: "Brian mentioned his last name",
+            timestamp: "00:01"
+          },
+          %{
+            field: "email",
+            value: "brian@example.com",
+            context: "Brian mentioned his email address",
+            timestamp: "00:02"
+          },
+          %{
+            field: "phone",
+            value: "555-123-4567",
+            context: "John mentioned 'you can reach me at 555-123-4567'",
+            timestamp: "01:23"
+          },
+          %{
+            field: "company",
+            value: "Acme Corp",
+            context: "Sarah said she just joined Acme Corp",
+            timestamp: "05:47"
+          }
+        ]
+        {:ok, mock_suggestions}
+
+        # case call_gemini(prompt) do
+        #   {:ok, response} ->
+        #     parse_hubspot_suggestions(response)
+
+        #   {:error, reason} ->
+        #     {:error, reason}
+        # end
     end
   end
 
