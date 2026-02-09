@@ -12,6 +12,38 @@ defmodule SocialScribe.MeetingsTest do
 
   @mock_transcript_data %{"data" => meeting_transcript_example()}
 
+  defp chat_session_fixture(meeting, user, attrs \\ %{}) do
+    {:ok, session} =
+      attrs
+      |> Enum.into(%{
+        meeting_id: meeting.id,
+        user_id: user.id,
+        started_at: DateTime.utc_now()
+      })
+      |> Meetings.create_chat_session()
+
+    session
+  end
+
+  defp chat_message_fixture(meeting, user, session, attrs \\ %{}) do
+    now = DateTime.utc_now()
+
+    {:ok, message} =
+      attrs
+      |> Enum.into(%{
+        meeting_id: meeting.id,
+        user_id: user.id,
+        chat_session_id: session.id,
+        message_type: "user",
+        content: "hello",
+        timestamp: now,
+        chat_date: DateTime.to_date(now)
+      })
+      |> Meetings.create_chat_message()
+
+    message
+  end
+
   describe "meetings" do
     @invalid_attrs %{title: nil, recorded_at: nil, duration_seconds: nil}
 
@@ -339,6 +371,90 @@ defmodule SocialScribe.MeetingsTest do
 
              ### Transcript:
              """
+    end
+  end
+
+  describe "meeting chat sessions" do
+    setup do
+      user = user_fixture()
+      calendar_event = calendar_event_fixture(%{user_id: user.id})
+      recall_bot = recall_bot_fixture(%{user_id: user.id, calendar_event_id: calendar_event.id})
+      meeting = meeting_fixture(%{calendar_event_id: calendar_event.id, recall_bot_id: recall_bot.id})
+
+      %{user: user, meeting: meeting}
+    end
+
+    test "list_chat_sessions/2 returns most recent first", %{meeting: meeting, user: user} do
+      older =
+        chat_session_fixture(meeting, user, %{
+          started_at: DateTime.add(DateTime.utc_now(), -3600, :second)
+        })
+
+      newer = chat_session_fixture(meeting, user, %{started_at: DateTime.utc_now()})
+
+      assert Meetings.list_chat_sessions(meeting, user) == [newer, older]
+    end
+
+    test "get_active_chat_session/2 returns latest non-ended session",
+         %{meeting: meeting, user: user} do
+      ended = chat_session_fixture(meeting, user, %{started_at: DateTime.add(DateTime.utc_now(), -7200, :second)})
+      {:ok, _} = Meetings.update_chat_session(ended, %{ended_at: DateTime.utc_now()})
+
+      active = chat_session_fixture(meeting, user, %{started_at: DateTime.add(DateTime.utc_now(), -3600, :second)})
+
+      assert Meetings.get_active_chat_session(meeting, user).id == active.id
+
+      {:ok, _} = Meetings.update_chat_session(active, %{ended_at: DateTime.utc_now()})
+
+      assert Meetings.get_active_chat_session(meeting, user) == nil
+    end
+  end
+
+  describe "meeting chat messages" do
+    setup do
+      user = user_fixture()
+      calendar_event = calendar_event_fixture(%{user_id: user.id})
+      recall_bot = recall_bot_fixture(%{user_id: user.id, calendar_event_id: calendar_event.id})
+      meeting = meeting_fixture(%{calendar_event_id: calendar_event.id, recall_bot_id: recall_bot.id})
+      session = chat_session_fixture(meeting, user)
+
+      %{user: user, meeting: meeting, session: session}
+    end
+
+    test "list_chat_messages_for_session/1 returns messages in insertion order",
+         %{meeting: meeting, user: user, session: session} do
+      first = chat_message_fixture(meeting, user, session, %{content: "first"})
+      second = chat_message_fixture(meeting, user, session, %{content: "second"})
+
+      assert Meetings.list_chat_messages_for_session(session) == [first, second]
+    end
+
+    test "get_first_chat_message_for_session/1 returns earliest message",
+         %{meeting: meeting, user: user, session: session} do
+      first = chat_message_fixture(meeting, user, session, %{content: "first"})
+      _second = chat_message_fixture(meeting, user, session, %{content: "second"})
+
+      assert Meetings.get_first_chat_message_for_session(session).id == first.id
+    end
+
+    test "list_chat_messages_for_date/3 filters by date",
+         %{meeting: meeting, user: user, session: session} do
+      date_1 = ~D[2026-02-07]
+      date_2 = ~D[2026-02-08]
+
+      msg_1 =
+        chat_message_fixture(meeting, user, session, %{
+          chat_date: date_1,
+          timestamp: DateTime.new!(date_1, ~T[10:00:00], "Etc/UTC")
+        })
+
+      _msg_2 =
+        chat_message_fixture(meeting, user, session, %{
+          chat_date: date_2,
+          timestamp: DateTime.new!(date_2, ~T[11:00:00], "Etc/UTC")
+        })
+
+      assert Meetings.list_chat_messages_for_date(meeting, user, date_1) == [msg_1]
     end
   end
 end
