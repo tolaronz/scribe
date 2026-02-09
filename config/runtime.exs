@@ -47,9 +47,10 @@ config :ueberauth, Ueberauth.Strategy.Salesforce.OAuth,
   redirect_uri: System.get_env("SALESFORCE_REDIRECT_URI"),
   site: System.get_env("SALESFORCE_SITE")
 
-if System.get_env("PHX_SERVER") do
+if config_env() == :prod do
   config :social_scribe, SocialScribeWeb.Endpoint, server: true
 end
+
 
 if config_env() == :prod do
   database_url =
@@ -106,7 +107,13 @@ if config_env() == :prod do
       """
 
   host = System.get_env("PHX_HOST") || "example.com"
-  port = String.to_integer(System.get_env("PORT") || "4000")
+
+  port =
+  System.get_env("PORT") ||
+  System.get_env("PHX_PORT") ||
+  "3000"
+
+  port = String.to_integer(port)
 
   # config :social_scribe, SocialScribeWeb.Endpoint,
   #   url: [host: host, port: 443, scheme: "https"],
