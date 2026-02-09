@@ -3,3 +3,108 @@
 @import "tailwindcss/utilities";
 
 /* This file is for your main application CSS */
+
+/* Chat Component Styles */
+.chat-message {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dropdown-item:hover {
+  background-color: #f3f4f6;
+}
+
+.dropdown-item.active {
+  background-color: #e5e7eb;
+  border-left: 3px solid #3b82f6;
+}
+
+.message-input-container {
+  position: relative;
+}
+
+.message-input-container textarea {
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.message-input-container textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.send-button {
+  transition: all 0.2s;
+}
+
+.send-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.send-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.message-history {
+  transition: all 0.3s ease;
+}
+
+.message-bubble {
+  transition: all 0.2s ease;
+}
+
+.message-bubble:hover {
+  transform: translateY(-1px);
+}
+
+.contact-info-badge {
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+/* Improve dropdown positioning */
+.chat-dropdown {
+  z-index: 50;
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Responsive adjustments for chat */
+@media (max-width: 768px) {
+  .message-input-container textarea {
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+
+  .message-bubble {
+    max-width: 100% !important;
+  }
+}
+
+[contenteditable][data-placeholder]:empty:before {
+  content: attr(data-placeholder);
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+[contenteditable]:focus {
+  outline: none;
+}

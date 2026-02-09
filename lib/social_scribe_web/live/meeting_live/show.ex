@@ -12,6 +12,7 @@ defmodule SocialScribeWeb.MeetingLive.Show do
   alias SocialScribe.HubspotSuggestions
   alias SocialScribe.SalesforceApiBehaviour, as: SalesforceApi
   alias SocialScribe.SalesforceSuggestions
+  alias SocialScribe.AIContentGeneratorApi
 
   @impl true
   def mount(%{"id" => meeting_id}, _session, socket) do
@@ -43,6 +44,7 @@ defmodule SocialScribeWeb.MeetingLive.Show do
         |> assign(:user_has_automations, user_has_automations)
         |> assign(:hubspot_credential, hubspot_credential)
         |> assign(:salesforce_credential, salesforce_credential)
+        |> assign(:collapsed, false)
         |> assign(
           :follow_up_email_form,
           to_form(%{
@@ -79,6 +81,11 @@ defmodule SocialScribeWeb.MeetingLive.Show do
       |> assign(:follow_up_email_form, to_form(params))
 
     {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("toggle_chat", _params, socket) do
+    {:noreply, assign(socket, collapsed: !socket.assigns.collapsed)}
   end
 
   @impl true
@@ -173,7 +180,7 @@ defmodule SocialScribeWeb.MeetingLive.Show do
   def handle_info({:generate_salesforce_suggestions, contact, meeting, _credential}, socket) do
     case SalesforceSuggestions.generate_suggestions_from_meeting(meeting) do
       {:ok, suggestions} ->
-        merged = SalesforceSuggestions.merge_with_contact(suggestions, normalize_salesforce_contact(contact))
+        merged = SalesforceSuggestions.merge_with_contact(suggestions, normalize_contact(contact))
 
         send_update(SocialScribeWeb.MeetingLive.SalesforceModalComponent,
           id: "salesforce-modal",
@@ -217,10 +224,6 @@ defmodule SocialScribeWeb.MeetingLive.Show do
 
   defp normalize_contact(contact) do
     # Contact is already formatted with atom keys from HubspotApi.format_contact
-    contact
-  end
-
-  defp normalize_salesforce_contact(contact) do
     contact
   end
 

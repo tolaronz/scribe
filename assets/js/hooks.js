@@ -1,3 +1,5 @@
+import MentionInput from "./mention_input"
+
 let Hooks = {}
 
 Hooks.Clipboard = {
@@ -12,5 +14,7 @@ Hooks.Clipboard = {
         })
     }
 }
+
+Hooks.MentionInput = MentionInput
 
 export default Hooks

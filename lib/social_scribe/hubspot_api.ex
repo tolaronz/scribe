@@ -141,6 +141,33 @@ defmodule SocialScribe.HubspotApi do
     end
   end
 
+  @doc """
+  Gets a contact with all available properties for AI context.
+  This is optimized for providing comprehensive contact data to AI functions.
+  Automatically refreshes token on 401/expired errors and retries once.
+  """
+  def get_contact_with_properties(%UserCredential{} = credential, contact_id) do
+    with_token_refresh(credential, fn cred ->
+      # Get all standard properties plus any custom properties
+      properties_param = Enum.join(@contact_properties, ",")
+      url = "/crm/v3/objects/contacts/#{contact_id}?properties=#{properties_param}&associations=companies"
+
+      case Tesla.get(client(cred.token), url) do
+        {:ok, %Tesla.Env{status: 200, body: body}} ->
+          {:ok, format_contact(body)}
+
+        {:ok, %Tesla.Env{status: 404, body: _body}} ->
+          {:error, :not_found}
+
+        {:ok, %Tesla.Env{status: status, body: body}} ->
+          {:error, {:api_error, status, body}}
+
+        {:error, reason} ->
+          {:error, {:http_error, reason}}
+      end
+    end)
+  end
+
   # Format a HubSpot contact response into a cleaner structure
   defp format_contact(%{"id" => id, "properties" => properties}) do
     %{

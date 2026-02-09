@@ -91,50 +91,75 @@ defmodule SocialScribe.AIContentGenerator do
         #{meeting_prompt}
         """
 
-        # TODO: mock suggestion response
+      case call_gemini(prompt) do
+        {:ok, response} ->
+          parse_hubspot_suggestions(response)
 
-        mock_suggestions = [
-          %{
-            field: "firstname",
-            value: "Brian",
-            context: "Brian mentioned his first name",
-            timestamp: "00:00"
-          },
-          %{
-            field: "lastname",
-            value: "Smiths",
-            context: "Brian mentioned his last name",
-            timestamp: "00:01"
-          },
-          %{
-            field: "email",
-            value: "brian@example.com",
-            context: "Brian mentioned his email address",
-            timestamp: "00:02"
-          },
-          %{
-            field: "phone",
-            value: "555-123-4567",
-            context: "John mentioned 'you can reach me at 555-123-4567'",
-            timestamp: "01:23"
-          },
-          %{
-            field: "company",
-            value: "Acme Corp",
-            context: "Sarah said she just joined Acme Corp",
-            timestamp: "05:47"
-          }
-        ]
-        {:ok, mock_suggestions}
-
-        # case call_gemini(prompt) do
-        #   {:ok, response} ->
-        #     parse_hubspot_suggestions(response)
-
-        #   {:error, reason} ->
-        #     {:error, reason}
-        # end
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
+  end
+
+  @impl SocialScribe.AIContentGeneratorApi
+  def generate_contact_answer(meeting, contact, question) do
+    case Meetings.generate_prompt_for_meeting(meeting) do
+      {:error, reason} ->
+        {:error, reason}
+
+      {:ok, meeting_prompt} ->
+        contact_info = format_contact_for_prompt(contact)
+
+        prompt = """
+        You are an AI assistant that answers questions about HubSpot contacts using their CRM data and meeting transcripts.
+
+        Contact Information:
+        #{contact_info}
+
+        Meeting Transcript:
+        #{meeting_prompt}
+
+        User Question: #{question}
+
+        Instructions:
+        1. Answer the user's question using ONLY the information provided in the contact data and meeting transcript above.
+        2. If the information needed to answer the question is not available, clearly state that the information is not available.
+        3. Provide specific details and context from the sources when answering.
+        4. Cite the source of your information (e.g., "According to HubSpot", "In the meeting transcript", "Based on both sources").
+        5. Keep your response concise but informative.
+        6. Do not make up or infer information that is not explicitly stated in the provided sources.
+
+        Answer the question directly and clearly.
+        """
+
+        call_gemini(prompt)
+
+    end
+  end
+
+  defp format_contact_for_prompt(contact) do
+    fields = [
+      {"First Name", contact.firstname},
+      {"Last Name", contact.lastname},
+      {"Email", contact.email},
+      {"Phone", contact.phone},
+      {"Mobile Phone", contact.mobilephone},
+      {"Company", contact.company},
+      {"Job Title", contact.jobtitle},
+      {"Address", contact.address},
+      {"City", contact.city},
+      {"State", contact.state},
+      {"ZIP Code", contact.zip},
+      {"Country", contact.country},
+      {"Website", contact.website},
+      {"LinkedIn", contact.linkedin_url},
+      {"Twitter", contact.twitter_handle}
+    ]
+
+    fields
+    |> Enum.filter(fn {_label, value} -> value != nil and value != "" end)
+    |> Enum.map(fn {label, value} -> "- #{label}: #{value}" end)
+    |> Enum.join("\n")
   end
 
   defp parse_hubspot_suggestions(response) do
