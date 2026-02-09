@@ -851,11 +851,10 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
             |> push_event("scroll_to_bottom", %{})}
 
           {:error, reason} ->
-            {:api_error, _status, body} = reason
-            message = get_in(body, ["error", "message"])
+            {:api_error, _status, _body} = reason
             error_message = %{
               type: "ai",
-              content: "I'm sorry, I couldn't generate a response: {#{message}}",
+              content: "I'm sorry, I couldn't generate a proper information for now. Please try again.",
               timestamp: format_timestamp(DateTime.utc_now()),
               contact: nil
             }
