@@ -10,6 +10,7 @@ defmodule SocialScribe.Meetings do
   alias SocialScribe.Meetings.MeetingTranscript
   alias SocialScribe.Meetings.MeetingParticipant
   alias SocialScribe.Meetings.MeetingChatMessage
+  alias SocialScribe.Meetings.MeetingChatSession
   alias SocialScribe.Bots.RecallBot
 
   require Logger
@@ -542,6 +543,105 @@ defmodule SocialScribe.Meetings do
   def list_chat_messages(meeting, user) do
     from(mcm in MeetingChatMessage,
       where: mcm.meeting_id == ^meeting.id and mcm.user_id == ^user.id,
+      order_by: [asc: mcm.inserted_at]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Lists all chat sessions for a meeting and user (most recent first).
+  """
+  def list_chat_sessions(meeting, user) do
+    from(mcs in MeetingChatSession,
+      where: mcs.meeting_id == ^meeting.id and mcs.user_id == ^user.id,
+      order_by: [desc: mcs.started_at]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Gets the active (non-ended) chat session for a meeting and user.
+  """
+  def get_active_chat_session(meeting, user) do
+    from(mcs in MeetingChatSession,
+      where:
+        mcs.meeting_id == ^meeting.id and mcs.user_id == ^user.id and is_nil(mcs.ended_at),
+      order_by: [desc: mcs.started_at],
+      limit: 1
+    )
+    |> Repo.one()
+  end
+
+  @doc """
+  Creates a chat session.
+  """
+  def create_chat_session(attrs \\ %{}) do
+    %MeetingChatSession{}
+    |> MeetingChatSession.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Updates a chat session.
+  """
+  def update_chat_session(%MeetingChatSession{} = session, attrs) do
+    session
+    |> MeetingChatSession.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Closes a chat session by setting ended_at (and optionally preview).
+  """
+  def close_chat_session(%MeetingChatSession{} = session, attrs \\ %{}) do
+    attrs = Map.put_new(attrs, :ended_at, DateTime.utc_now())
+    update_chat_session(session, attrs)
+  end
+
+  @doc """
+  Lists chat messages for a session.
+  """
+  def list_chat_messages_for_session(%MeetingChatSession{} = session) do
+    from(mcm in MeetingChatMessage,
+      where: mcm.chat_session_id == ^session.id,
+      order_by: [asc: mcm.inserted_at]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Gets the first chat message for a session.
+  """
+  def get_first_chat_message_for_session(%MeetingChatSession{} = session) do
+    from(mcm in MeetingChatMessage,
+      where: mcm.chat_session_id == ^session.id,
+      order_by: [asc: mcm.inserted_at],
+      limit: 1
+    )
+    |> Repo.one()
+  end
+
+  @doc """
+  Lists distinct chat dates for a meeting and user (most recent first).
+  """
+  def list_chat_dates(meeting, user) do
+    from(mcm in MeetingChatMessage,
+      where: mcm.meeting_id == ^meeting.id and mcm.user_id == ^user.id,
+      select: mcm.chat_date,
+      distinct: mcm.chat_date,
+      order_by: [desc: mcm.chat_date]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Lists chat messages for a meeting and user on a specific date.
+  """
+  def list_chat_messages_for_date(meeting, user, %Date{} = date) do
+    from(mcm in MeetingChatMessage,
+      where:
+        mcm.meeting_id == ^meeting.id and mcm.user_id == ^user.id and
+          mcm.chat_date == ^date,
       order_by: [asc: mcm.inserted_at]
     )
     |> Repo.all()

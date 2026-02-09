@@ -159,28 +159,28 @@
         <%= if @collapsed do %>
           <button
             phx-click="toggle_chat"
-            class="fixed top-24 right-6 w-12 h-12 bg-orange-500 hover:bg-orange-600 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-300 transform hover:scale-105 z-50"
+            class="fixed top-24 right-6 p-4 text-slate-900 rounded-full bg-white shadow-lg transition-colors flex items-center justify-center z-50"
             title="Expand Chat"
           >
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
             </svg>
           </button>
         <% else %>
-          <div class="bg-white shadow-xl rounded-lg border border-slate-200 overflow-hidden transition-all duration-300">
-            <div class="flex justify-between items-center p-4 border-b border-slate-200 bg-gradient-to-r from-orange-500 to-orange-600 text-white">
-              <h2 class="text-lg font-semibold">Ask Anything</h2>
+          <div class="bg-white shadow-xl border border-slate-200 overflow-hidden transition-all duration-300 lg:-ml-[14px] lg:w-[calc(100%+14px)]">
+            <div class="flex justify-between items-center p-4 bg-transparent text-slate-900">
+              <h2 class="text-[25px] font-semibold relative left-[10px] top-[10px]">Ask Anything</h2>
               <button
                 phx-click="toggle_chat"
-                class="p-2 hover:bg-white hover:bg-opacity-20 rounded-full transition-colors"
+                class="p-2.5 hover:bg-white hover:bg-opacity-20 rounded-full transition-colors relative -left-[15px] top-[15px] m-[-3px_-8px_2px_0px]"
                 title="Collapse Chat"
               >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>
                 </svg>
               </button>
             </div>
-            <div class="h-[calc(100vh-200px)] overflow-hidden">
+            <div class="h-[calc(100vh-180px)] overflow-hidden">
               <.live_component
                 module={SocialScribeWeb.MeetingLive.ChatComponent}
                 id="meeting-chat"

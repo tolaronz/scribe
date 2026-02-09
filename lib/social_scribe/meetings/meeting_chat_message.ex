@@ -3,6 +3,7 @@ defmodule SocialScribe.Meetings.MeetingChatMessage do
   import Ecto.Changeset
 
   alias SocialScribe.Meetings.Meeting
+  alias SocialScribe.Meetings.MeetingChatSession
   alias SocialScribe.Accounts.User
 
   schema "meeting_chat_messages" do
@@ -11,7 +12,9 @@ defmodule SocialScribe.Meetings.MeetingChatMessage do
     field :contact_id, :string
     field :contact_data, :map
     field :timestamp, :utc_datetime
+    field :chat_date, :date
 
+    belongs_to :chat_session, MeetingChatSession
     belongs_to :meeting, Meeting
     belongs_to :user, User
 
@@ -27,14 +30,18 @@ defmodule SocialScribe.Meetings.MeetingChatMessage do
       :content,
       :contact_id,
       :contact_data,
-      :timestamp
+      :timestamp,
+      :chat_date,
+      :chat_session_id
     ])
     |> validate_required([
       :meeting_id,
       :user_id,
       :message_type,
       :content,
-      :timestamp
+      :timestamp,
+      :chat_date,
+      :chat_session_id
     ])
     |> validate_inclusion(:message_type, ["user", "ai"])
   end
