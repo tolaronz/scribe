@@ -103,7 +103,7 @@ config :ueberauth, Ueberauth,
     salesforce:
       {Ueberauth.Strategy.Salesforce,
        [
-         default_scope: "api"
+         default_scope: "full"
        ]}
   ]
 
