@@ -48,11 +48,6 @@ config :ueberauth, Ueberauth.Strategy.Salesforce.OAuth,
   site: System.get_env("SALESFORCE_SITE")
 
 if config_env() == :prod do
-  config :social_scribe, SocialScribeWeb.Endpoint, server: true
-end
-
-
-if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||
       raise """
@@ -109,28 +104,24 @@ if config_env() == :prod do
   host = System.get_env("PHX_HOST") || "example.com"
 
   port =
-  System.get_env("PORT") ||
-  System.get_env("PHX_PORT") ||
-  "3000"
+    System.get_env("PORT") ||
+    System.get_env("PHX_PORT") ||
+    "3000"
 
   port = String.to_integer(port)
 
-  # config :social_scribe, SocialScribeWeb.Endpoint,
-  #   url: [host: host, port: 443, scheme: "https"],
-  #   http: [
-  #     # Enable IPv6 and bind on all interfaces.
-  #     # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
-  #     # See the documentation on https://hexdocs.pm/bandit/Bandit.html#t:options/0
-  #     # for details about using IPv6 vs IPv4 and loopback vs public addresses.
-  #     ip: {0, 0, 0, 0, 0, 0, 0, 0},
-  #     port: port
-  #   ],
-  #   secret_key_base: secret_key_base
+  # CONSOLIDATED ENDPOINT CONFIG - ALL IN ONE PLACE
   config :social_scribe, SocialScribeWeb.Endpoint,
-  url: [host: host, port: 443, scheme: "https"],
-  http: [ip: {0, 0, 0, 0}, port: port],
-  secret_key_base: secret_key_base
+    url: [host: host, port: 443, scheme: "https"],
+    http: [
+      # Enable IPv6 and bind on all interfaces.
+      ip: {0, 0, 0, 0, 0, 0, 0, 0},
+      port: port
+    ],
+    secret_key_base: secret_key_base,
+    server: true  # CRITICAL: This enables the web server in production
 
+  # Override Google OAuth redirect URI for production
   config :ueberauth, Ueberauth.Strategy.Google.OAuth,
     redirect_uri: "https://" <> host <> "/auth/google/callback"
 
