@@ -9,6 +9,7 @@ defmodule SocialScribe.Meetings do
   alias SocialScribe.Meetings.Meeting
   alias SocialScribe.Meetings.MeetingTranscript
   alias SocialScribe.Meetings.MeetingParticipant
+  alias SocialScribe.Meetings.MeetingChatMessage
   alias SocialScribe.Bots.RecallBot
 
   require Logger
@@ -532,4 +533,45 @@ defmodule SocialScribe.Meetings do
   # Handle direct float format: 0.48204318
   defp extract_seconds(seconds) when is_number(seconds), do: seconds
   defp extract_seconds(_), do: 0
+
+  # --- Chat Message Functions ---
+
+  @doc """
+  Lists all chat messages for a meeting and user.
+  """
+  def list_chat_messages(meeting, user) do
+    from(mcm in MeetingChatMessage,
+      where: mcm.meeting_id == ^meeting.id and mcm.user_id == ^user.id,
+      order_by: [asc: mcm.inserted_at]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Creates a chat message.
+  """
+  def create_chat_message(attrs \\ %{}) do
+    %MeetingChatMessage{}
+    |> MeetingChatMessage.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Gets a chat message by ID.
+  """
+  def get_chat_message(id), do: Repo.get(MeetingChatMessage, id)
+
+  @doc """
+  Deletes a chat message.
+  """
+  def delete_chat_message(%MeetingChatMessage{} = chat_message) do
+    Repo.delete(chat_message)
+  end
+
+  @doc """
+  Returns an `%Ecto.Changeset{}` for tracking chat message changes.
+  """
+  def change_chat_message(%MeetingChatMessage{} = chat_message, attrs \\ %{}) do
+    MeetingChatMessage.changeset(chat_message, attrs)
+  end
 end

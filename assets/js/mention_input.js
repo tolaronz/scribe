@@ -27,8 +27,11 @@ let MentionInput = {
         this.handleEvent("clear_input", () => {
             this.clearInput()
         })
+        // Listen for scroll to bottom event
+        this.handleEvent("scroll_to_bottom", () => {
+            this.scrollToBottom()
+        })
     },
-
     addHighlightStyles() {
         if (!document.getElementById('mention-highlight-styles')) {
             const style = document.createElement('style')
@@ -237,9 +240,7 @@ let MentionInput = {
         if (this.hiddenInput) {
             this.hiddenInput.value = ''
         }
-        this.highlightedContacts = []
     },
-
     getPlainText() {
         // Get plain text from contenteditable, preserving contact references
         let text = ''

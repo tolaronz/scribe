@@ -76,7 +76,7 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
                 <div class="mt-1 text-sm">
                   <%= if message.type == "ai" and message.contact do %>
                     <div class="text-xs text-slate-500 mb-1">
-                      Contact: <span class="font-medium">{message.contact.display_name}</span>
+                      Contact: <span class="font-medium">{get_contact_field(message.contact, :display_name)}</span>
                     </div>
                   <% end %>
 
@@ -120,11 +120,11 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
               :for={contact <- @contacts}
               class="p-2 hover:bg-slate-50 cursor-pointer"
               phx-click="select_contact"
-              phx-value-id={contact.id}
+              phx-value-id={get_contact_field(contact, :id)}
               phx-target={@target}
             >
-              <div class="font-medium">{contact.display_name}</div>
-              <div class="text-sm text-slate-500">{contact.email}</div>
+              <div class="font-medium">{get_contact_field(contact, :display_name)}</div>
+              <div class="text-sm text-slate-500">{get_contact_field(contact, :email)}</div>
             </li>
           </ul>
         </div>
@@ -167,7 +167,6 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
     socket =
       socket
       |> assign(assigns)
-      |> assign_new(:messages, fn -> [] end)
       |> assign_new(:message, fn -> "" end)
       |> assign_new(:contacts, fn -> [] end)
       |> assign_new(:loading, fn -> false end)
@@ -177,9 +176,14 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
       |> assign_new(:error, fn -> nil end)
       |> assign_new(:selected_contact_id, fn -> nil end)
       |> assign_new(:collapsed, fn -> false end)
-      |> assign_new(:highlighted_contacts, fn -> [] end)
 
-    {:ok, socket}
+    # Load existing messages from database
+    messages = load_messages(socket.assigns.meeting, socket.assigns.current_user)
+
+    socket = assign(socket, messages: messages)
+
+    # Scroll to bottom when component mounts or messages are loaded
+    {:ok, push_event(socket, "scroll_to_bottom", %{})}
   end
 
   @impl true
@@ -223,20 +227,22 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
 
   @impl true
   def handle_event("select_contact", %{"id" => contact_id}, socket) do
-    contact = Enum.find(socket.assigns.contacts, &(&1.id == contact_id))
+    contact = Enum.find(socket.assigns.contacts, fn c ->
+      get_contact_field(c, :id) == contact_id
+    end)
 
     if contact do
       # Extract first name from display name
-      first_name = extract_first_name(contact.display_name)
+      first_name = extract_first_name(get_contact_field(contact, :display_name))
 
       # Send data to JavaScript hook to update the input
       socket = push_event(socket, "update_contact_highlight", %{
-        contact_id: contact.id,
-        display_name: contact.display_name,
+        contact_id: get_contact_field(contact, :id),
+        display_name: get_contact_field(contact, :display_name),
         first_name: "@" <> first_name
       })
 
-      {:noreply, assign(socket, selected_contact_id: contact.id, dropdown_open: false, query: "")}
+      {:noreply, assign(socket, selected_contact_id: get_contact_field(contact, :id), dropdown_open: false, query: "")}
     else
       {:noreply, assign(socket, error: "Contact not found")}
     end
@@ -264,12 +270,22 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
             if Enum.any?(contacts) do
               contact = Enum.at(contacts, 0)
 
+              # Normalize contact to use string keys (consistent with loaded messages)
+              normalized_contact = %{
+                "id" => get_contact_field(contact, :id),
+                "display_name" => get_contact_field(contact, :display_name),
+                "email" => get_contact_field(contact, :email)
+              }
+
+              # Save user message to database
+              save_message_to_db(socket.assigns.meeting, socket.assigns.current_user, "user", message, normalized_contact)
+
               # Add user message to history WITH contact info
               user_message = %{
                 type: "user",
                 content: message,
                 timestamp: format_timestamp(DateTime.utc_now()),
-                contact: contact  # Store contact so we can highlight it
+                contact: normalized_contact
               }
 
               socket = assign(socket,
@@ -281,9 +297,10 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
                 query: ""
               )
               |> push_event("clear_input", %{})
+              |> push_event("scroll_to_bottom", %{})
 
               # Generate AI response
-              generate_and_add_ai_response(socket, contact, message)
+              generate_and_add_ai_response(socket, normalized_contact, message)
             else
               {:noreply, assign(socket, error: "No contact found with name: #{contact_name}")}
             end
@@ -299,37 +316,54 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
 
   defp generate_and_add_ai_response(socket, contact, question) do
     # Get full contact data
-    case HubspotApi.get_contact_with_properties(socket.assigns.credential, contact.id) do
+    case HubspotApi.get_contact_with_properties(socket.assigns.credential, contact["id"]) do
       {:ok, full_contact} ->
+        # Normalize full_contact to use string keys
+        normalized_full_contact = %{
+          "id" => get_contact_field(full_contact, :id),
+          "display_name" => get_contact_field(full_contact, :display_name),
+          "email" => get_contact_field(full_contact, :email)
+        }
+
         # Generate AI response
         case AIContentGeneratorApi.generate_contact_answer(socket.assigns.meeting, full_contact, question) do
           {:ok, response} ->
+            # Save AI message to database
+            save_message_to_db(socket.assigns.meeting, socket.assigns.current_user, "ai", response, normalized_full_contact)
+
             ai_message = %{
               type: "ai",
               content: response,
               timestamp: format_timestamp(DateTime.utc_now()),
-              contact: full_contact
+              contact: normalized_full_contact
             }
 
             {:noreply, assign(socket,
               messages: socket.assigns.messages ++ [ai_message],
               loading: false,
               message: ""
-            )}
+            )
+            |> push_event("scroll_to_bottom", %{})}
 
           {:error, reason} ->
+            {:api_error, _status, body} = reason
+            message = get_in(body, ["error", "message"])
             error_message = %{
               type: "ai",
-              content: "I'm sorry, I couldn't generate a response: #{inspect(reason)}",
+              content: "I'm sorry, I couldn't generate a response: {#{message}}",
               timestamp: format_timestamp(DateTime.utc_now()),
               contact: nil
             }
+
+            # Save error message to database
+            save_message_to_db(socket.assigns.meeting, socket.assigns.current_user, "ai", error_message.content, nil)
 
             {:noreply, assign(socket,
               messages: socket.assigns.messages ++ [error_message],
               loading: false,
               message: ""
-            )}
+            )
+            |> push_event("scroll_to_bottom", %{})}
         end
 
       {:error, reason} ->
@@ -340,11 +374,15 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
           contact: nil
         }
 
+        # Save error message to database
+        save_message_to_db(socket.assigns.meeting, socket.assigns.current_user, "ai", error_message.content, nil)
+
         {:noreply, assign(socket,
           messages: socket.assigns.messages ++ [error_message],
           loading: false,
           message: ""
-        )}
+        )
+        |> push_event("scroll_to_bottom", %{})}
     end
   end
 
@@ -355,7 +393,9 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
   end
 
   defp parse_message_with_highlights(message_content, contact) do
-    first_name = extract_first_name(contact.display_name)
+    # Handle both atom keys (from structs) and string keys (from database/JSON)
+    display_name = get_contact_field(contact, :display_name)
+    first_name = extract_first_name(display_name)
 
     # Split by first name and create highlight parts
     parts = Regex.split(~r/(@#{Regex.escape(first_name)})/, message_content, include_captures: true)
@@ -373,9 +413,50 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
 
   defp extract_first_name(display_name) do
     # Extract first name from full name (everything before the first space)
-    case String.split(display_name, " ") do
+    case String.split(display_name || "", " ") do
       [first_name | _] -> first_name
       [] -> display_name
+    end
+  end
+
+  defp get_contact_field(contact, field) when is_atom(field) do
+    string_key = Atom.to_string(field)
+    contact[string_key] || contact[field] || Map.get(contact, field)
+  end
+
+
+  defp load_messages(meeting, user) do
+    SocialScribe.Meetings.list_chat_messages(meeting, user)
+    |> Enum.map(fn message ->
+      %{
+        type: message.message_type,
+        content: message.content,
+        timestamp: format_timestamp(message.timestamp),
+        contact: (if message.contact_data, do: message.contact_data, else: nil)
+      }
+    end)
+  end
+
+  defp save_message_to_db(meeting, user, message_type, content, contact \\ nil) do
+    contact_data = if contact, do: %{
+      "id" => contact["id"],
+      "display_name" => contact["display_name"],
+      "email" => contact["email"]
+    }, else: nil
+
+    attrs = %{
+      meeting_id: meeting.id,
+      user_id: user.id,
+      message_type: message_type,
+      content: content,
+      contact_id: contact && contact["id"],
+      contact_data: contact_data,
+      timestamp: DateTime.utc_now()
+    }
+
+    case SocialScribe.Meetings.create_chat_message(attrs) do
+      {:ok, _chat_message} -> :ok
+      {:error, reason} -> {:error, reason}
     end
   end
 end
