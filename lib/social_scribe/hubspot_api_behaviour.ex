@@ -12,9 +12,6 @@ defmodule SocialScribe.HubspotApiBehaviour do
   @callback get_contact(credential :: UserCredential.t(), contact_id :: String.t()) ::
               {:ok, map()} | {:error, any()}
 
-  @callback get_contact_with_properties(credential :: UserCredential.t(), contact_id :: String.t()) ::
-              {:ok, map()} | {:error, any()}
-
   @callback update_contact(
               credential :: UserCredential.t(),
               contact_id :: String.t(),
@@ -35,10 +32,6 @@ defmodule SocialScribe.HubspotApiBehaviour do
 
   def get_contact(credential, contact_id) do
     impl().get_contact(credential, contact_id)
-  end
-
-  def get_contact_with_properties(credential, contact_id) do
-    impl().get_contact_with_properties(credential, contact_id)
   end
 
   def update_contact(credential, contact_id, updates) do

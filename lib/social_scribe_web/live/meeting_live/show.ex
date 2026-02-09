@@ -12,7 +12,6 @@ defmodule SocialScribeWeb.MeetingLive.Show do
   alias SocialScribe.HubspotSuggestions
   alias SocialScribe.SalesforceApiBehaviour, as: SalesforceApi
   alias SocialScribe.SalesforceSuggestions
-  alias SocialScribe.AIContentGeneratorApi
 
   @impl true
   def mount(%{"id" => meeting_id}, _session, socket) do

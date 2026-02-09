@@ -63,16 +63,13 @@ defmodule SocialScribe.AIContentGenerator do
         - Company name (company)
         - Job title/role (jobtitle)
         - Physical address details (address, city, state, zip, country)
-        - Website URLs (website)
-        - LinkedIn profile (linkedin_url)
-        - Twitter handle (twitter_handle)
 
         IMPORTANT: Only extract information that is EXPLICITLY mentioned in the transcript. Do not infer or guess.
 
         The transcript includes timestamps in [MM:SS] format at the start of each line.
 
         Return your response as a JSON array of objects. Each object should have:
-        - "field": the CRM field name (use exactly: firstname, lastname, email, phone, mobilephone, company, jobtitle, address, city, state, zip, country, website, linkedin_url, twitter_handle)
+        - "field": the CRM field name (use exactly: firstname, lastname, email, phone, mobilephone, company, jobtitle, address, city, state, zip, country)
         - "value": the extracted value
         - "context": a brief quote of where this was mentioned
         - "timestamp": the timestamp in MM:SS format where this was mentioned
@@ -111,7 +108,7 @@ defmodule SocialScribe.AIContentGenerator do
         contact_info = format_contact_for_prompt(contact)
 
         prompt = """
-        You are an AI assistant that answers questions about HubSpot contacts using their CRM data and meeting transcripts.
+        You are an AI assistant that answers questions about HubSpot and Salesforce contacts using their CRM data and meeting transcripts.
 
         Contact Information:
         #{contact_info}
@@ -125,7 +122,7 @@ defmodule SocialScribe.AIContentGenerator do
         1. Answer the user's question using ONLY the information provided in the contact data and meeting transcript above.
         2. If the information needed to answer the question is not available, clearly state that the information is not available.
         3. Provide specific details and context from the sources when answering.
-        4. Cite the source of your information (e.g., "According to HubSpot", "In the meeting transcript", "Based on both sources").
+        4. Cite the source of your information (e.g., "According to HubSpot", "According to Salesforce", "In the meeting transcript", "Based on both sources").
         5. Keep your response concise but informative.
         6. Do not make up or infer information that is not explicitly stated in the provided sources.
 
@@ -150,10 +147,7 @@ defmodule SocialScribe.AIContentGenerator do
       {"City", contact.city},
       {"State", contact.state},
       {"ZIP Code", contact.zip},
-      {"Country", contact.country},
-      {"Website", contact.website},
-      {"LinkedIn", contact.linkedin_url},
-      {"Twitter", contact.twitter_handle}
+      {"Country", contact.country}
     ]
 
     fields

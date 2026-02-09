@@ -3,15 +3,16 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
 
   alias SocialScribe.AIContentGeneratorApi
   alias SocialScribe.HubspotApi
+  alias SocialScribe.SalesforceApi
+
 
   @impl true
   def render(assigns) do
     ~H"""
     <div class="h-full flex flex-col">
       <div class="flex-shrink-0 p-6 pb-0">
-        <h2 class="text-xl font-medium tracking-tight text-slate-900 mb-4">HubSpot Contact Chat</h2>
         <p class="text-base font-light leading-7 text-slate-500 mb-6">
-          Ask questions about your contacts using their HubSpot data and meeting transcripts.
+          Ask questions about your contacts using their HubSpot or Salesforce data and meeting transcripts.
           Type @ to mention a contact.
         </p>
       </div>
@@ -123,8 +124,28 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
               phx-value-id={get_contact_field(contact, :id)}
               phx-target={@target}
             >
-              <div class="font-medium">{get_contact_field(contact, :display_name)}</div>
-              <div class="text-sm text-slate-500">{get_contact_field(contact, :email)}</div>
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-medium">{get_contact_field(contact, :display_name)}</div>
+                  <div class="text-sm text-slate-500">{get_contact_field(contact, :email)}</div>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <%= case get_contact_field(contact, :source) do %>
+                    <% "HubSpot" -> %>
+                      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        HubSpot
+                      </span>
+                    <% "Salesforce" -> %>
+                      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                        Salesforce
+                      </span>
+                    <% _ -> %>
+                      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        Unknown
+                      </span>
+                  <% end %>
+                </div>
+              </div>
             </li>
           </ul>
         </div>
@@ -198,20 +219,67 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
       query = String.trim(Enum.at(mention_match, 1))
 
       if String.length(query) >= 2 do
-        # Search contacts directly
-        case HubspotApi.search_contacts(socket.assigns.credential, query) do
-          {:ok, contacts} ->
+        # Search contacts from both HubSpot and Salesforce
+        hubspot_task = Task.async(fn ->
+          case socket.assigns.hubspot_credential do
+            nil -> {:ok, []}
+            credential -> HubspotApi.search_contacts(credential, query)
+          end
+        end)
+
+        salesforce_task = Task.async(fn ->
+          case socket.assigns.salesforce_credential do
+            nil -> {:ok, []}
+            credential -> SalesforceApi.search_contacts(credential, query)
+          end
+        end)
+
+        # Wait for both searches to complete
+        hubspot_result = Task.await(hubspot_task, 10_000)
+        salesforce_result = Task.await(salesforce_task, 10_000)
+
+        # Merge results and handle errors - show results from any successful searches
+        case {hubspot_result, salesforce_result} do
+          {{:ok, hubspot_contacts}, {:ok, salesforce_contacts}} ->
+            # Both succeeded - merge and deduplicate contacts
+            merged_contacts = merge_contacts(hubspot_contacts, salesforce_contacts, query)
+
             {:noreply, assign(socket,
-              contacts: contacts,
+              contacts: merged_contacts,
               searching: false,
               error: nil,
               query: query,
               dropdown_open: true
             )}
 
-          {:error, reason} ->
+          {{:ok, hubspot_contacts}, {:error, _}} ->
+            # Only HubSpot succeeded - add source indicator and use results
+            hubspot_with_source = Enum.map(hubspot_contacts, &Map.put(&1, :source, "HubSpot"))
+
             {:noreply, assign(socket,
-              error: "Failed to search contacts: #{inspect(reason)}",
+              contacts: hubspot_with_source,
+              searching: false,
+              error: nil,
+              query: query,
+              dropdown_open: true
+            )}
+
+          {{:error, _}, {:ok, salesforce_contacts}} ->
+            # Only Salesforce succeeded - add source indicator and use results
+            salesforce_with_source = Enum.map(salesforce_contacts, &Map.put(&1, :source, "Salesforce"))
+
+            {:noreply, assign(socket,
+              contacts: salesforce_with_source,
+              searching: false,
+              error: nil,
+              query: query,
+              dropdown_open: true
+            )}
+
+          {{:error, hubspot_error}, {:error, salesforce_error}} ->
+            # Both failed
+            {:noreply, assign(socket,
+              error: "Both HubSpot and Salesforce searches failed: HubSpot: #{inspect(hubspot_error)}, Salesforce: #{inspect(salesforce_error)}",
               searching: false,
               query: query,
               dropdown_open: false
@@ -264,17 +332,40 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
           |> Enum.at(1)
           |> String.trim()
 
-        # Search for contact by name
-        case HubspotApi.search_contacts(socket.assigns.credential, contact_name) do
-          {:ok, contacts} ->
-            if Enum.any?(contacts) do
-              contact = Enum.at(contacts, 0)
+        # Search for contact by name in both CRMs
+        hubspot_task = Task.async(fn ->
+          case socket.assigns.hubspot_credential do
+            nil -> {:ok, []}
+            credential -> HubspotApi.search_contacts(credential, contact_name)
+          end
+        end)
+
+        salesforce_task = Task.async(fn ->
+          case socket.assigns.salesforce_credential do
+            nil -> {:ok, []}
+            credential -> SalesforceApi.search_contacts(credential, contact_name)
+          end
+        end)
+
+        # Wait for both searches to complete
+        hubspot_result = Task.await(hubspot_task, 10_000)
+        salesforce_result = Task.await(salesforce_task, 10_000)
+
+        # Merge results and handle errors
+        case {hubspot_result, salesforce_result} do
+          {{:ok, hubspot_contacts}, {:ok, salesforce_contacts}} ->
+            # Merge and deduplicate contacts
+            merged_contacts = merge_contacts(hubspot_contacts, salesforce_contacts, contact_name)
+
+            if Enum.any?(merged_contacts) do
+              contact = Enum.at(merged_contacts, 0)
 
               # Normalize contact to use string keys (consistent with loaded messages)
               normalized_contact = %{
                 "id" => get_contact_field(contact, :id),
                 "display_name" => get_contact_field(contact, :display_name),
-                "email" => get_contact_field(contact, :email)
+                "email" => get_contact_field(contact, :email),
+                "source" => get_contact_field(contact, :source)
               }
 
               # Save user message to database
@@ -305,8 +396,87 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
               {:noreply, assign(socket, error: "No contact found with name: #{contact_name}")}
             end
 
-          {:error, reason} ->
-            {:noreply, assign(socket, error: "Failed to search contacts: #{inspect(reason)}")}
+          {{:ok, _}, {:error, salesforce_error}} ->
+            # HubSpot succeeded, Salesforce failed - use HubSpot results
+            case hubspot_result do
+              {:ok, hubspot_contacts} ->
+                if Enum.any?(hubspot_contacts) do
+                  contact = Enum.at(hubspot_contacts, 0)
+                  normalized_contact = %{
+                    "id" => get_contact_field(contact, :id),
+                    "display_name" => get_contact_field(contact, :display_name),
+                    "email" => get_contact_field(contact, :email),
+                    "source" => "HubSpot"
+                  }
+
+                  save_message_to_db(socket.assigns.meeting, socket.assigns.current_user, "user", message, normalized_contact)
+
+                  user_message = %{
+                    type: "user",
+                    content: message,
+                    timestamp: format_timestamp(DateTime.utc_now()),
+                    contact: normalized_contact
+                  }
+
+                  socket = assign(socket,
+                    messages: socket.assigns.messages ++ [user_message],
+                    message: "",
+                    error: nil,
+                    loading: true,
+                    dropdown_open: false,
+                    query: ""
+                  )
+                  |> push_event("clear_input", %{})
+                  |> push_event("scroll_to_bottom", %{})
+
+                  generate_and_add_ai_response(socket, normalized_contact, message)
+                else
+                  {:noreply, assign(socket, error: "No contact found with name: #{contact_name}")}
+                end
+
+              {:error, reason} ->
+                {:noreply, assign(socket, error: "Failed to search contacts: #{inspect(reason)}")}
+            end
+
+          {{:error, hubspot_error}, {:ok, salesforce_contacts}} ->
+            # Salesforce succeeded, HubSpot failed - use Salesforce results
+            if Enum.any?(salesforce_contacts) do
+              contact = Enum.at(salesforce_contacts, 0)
+              normalized_contact = %{
+                "id" => get_contact_field(contact, :id),
+                "display_name" => get_contact_field(contact, :display_name),
+                "email" => get_contact_field(contact, :email),
+                "source" => "Salesforce"
+              }
+
+              save_message_to_db(socket.assigns.meeting, socket.assigns.current_user, "user", message, normalized_contact)
+
+              user_message = %{
+                type: "user",
+                content: message,
+                timestamp: format_timestamp(DateTime.utc_now()),
+                contact: normalized_contact
+              }
+
+              socket = assign(socket,
+                messages: socket.assigns.messages ++ [user_message],
+                message: "",
+                error: nil,
+                loading: true,
+                dropdown_open: false,
+                query: ""
+              )
+              |> push_event("clear_input", %{})
+              |> push_event("scroll_to_bottom", %{})
+
+              generate_and_add_ai_response(socket, normalized_contact, message)
+            else
+              {:noreply, assign(socket, error: "No contact found with name: #{contact_name}")}
+            end
+
+          {{:error, hubspot_error}, {:error, salesforce_error}} ->
+            # Both failed
+            {:noreply, assign(socket, error: "Failed to search contacts in both HubSpot and Salesforce: HubSpot: #{inspect(hubspot_error)}, Salesforce: #{inspect(salesforce_error)}")}
         end
       else
         {:noreply, assign(socket, error: "Please mention a contact with @name")}
@@ -315,14 +485,35 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
   end
 
   defp generate_and_add_ai_response(socket, contact, question) do
-    # Get full contact data
-    case HubspotApi.get_contact_with_properties(socket.assigns.credential, contact["id"]) do
+    # Get full contact data from the appropriate CRM based on source
+    source = contact["source"] || "HubSpot" # Default to HubSpot for backward compatibility
+
+    full_contact_result =
+      case source do
+        "HubSpot" ->
+          case socket.assigns.hubspot_credential do
+            nil -> {:error, :no_credential}
+            credential -> HubspotApi.get_contact(credential, contact["id"])
+          end
+
+        "Salesforce" ->
+          case socket.assigns.salesforce_credential do
+            nil -> {:error, :no_credential}
+            credential -> SalesforceApi.get_contact(credential, contact["id"])
+          end
+
+        _ ->
+          {:error, :unknown_source}
+      end
+
+    case full_contact_result do
       {:ok, full_contact} ->
         # Normalize full_contact to use string keys
         normalized_full_contact = %{
           "id" => get_contact_field(full_contact, :id),
           "display_name" => get_contact_field(full_contact, :display_name),
-          "email" => get_contact_field(full_contact, :email)
+          "email" => get_contact_field(full_contact, :email),
+          "source" => source
         }
 
         # Generate AI response
@@ -366,10 +557,46 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
             |> push_event("scroll_to_bottom", %{})}
         end
 
+      {:error, :no_credential} ->
+        error_message = %{
+          type: "ai",
+          content: "I'm sorry, I couldn't retrieve the contact information: No #{source} credentials available.",
+          timestamp: format_timestamp(DateTime.utc_now()),
+          contact: nil
+        }
+
+        # Save error message to database
+        save_message_to_db(socket.assigns.meeting, socket.assigns.current_user, "ai", error_message.content, nil)
+
+        {:noreply, assign(socket,
+          messages: socket.assigns.messages ++ [error_message],
+          loading: false,
+          message: ""
+        )
+        |> push_event("scroll_to_bottom", %{})}
+
+      {:error, :unknown_source} ->
+        error_message = %{
+          type: "ai",
+          content: "I'm sorry, I couldn't retrieve the contact information: Unknown contact source.",
+          timestamp: format_timestamp(DateTime.utc_now()),
+          contact: nil
+        }
+
+        # Save error message to database
+        save_message_to_db(socket.assigns.meeting, socket.assigns.current_user, "ai", error_message.content, nil)
+
+        {:noreply, assign(socket,
+          messages: socket.assigns.messages ++ [error_message],
+          loading: false,
+          message: ""
+        )
+        |> push_event("scroll_to_bottom", %{})}
+
       {:error, reason} ->
         error_message = %{
           type: "ai",
-          content: "I'm sorry, I couldn't retrieve the contact information: #{inspect(reason)}",
+          content: "I'm sorry, I couldn't retrieve the contact information from #{source}: #{inspect(reason)}",
           timestamp: format_timestamp(DateTime.utc_now()),
           contact: nil
         }
