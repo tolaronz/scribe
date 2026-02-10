@@ -29,7 +29,7 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
               phx-value-tab="chat"
               phx-target={@myself}
               class={[
-                "rounded-full px-3 py-1 text-[20px] transition-colors",
+                "rounded-[8px] px-3 py-1 text-[20px] transition-colors",
                 @active_tab == "chat" && "bg-slate-100 text-slate-800 shadow-sm" ||
                   "text-slate-400 hover:text-slate-600"
               ]}
@@ -42,7 +42,7 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
               phx-value-tab="history"
               phx-target={@myself}
               class={[
-                "rounded-full px-3 py-1 text-[20px] transition-colors",
+                "rounded-[8px] px-3 py-1 text-[20px] transition-colors",
                 @active_tab == "history" && "bg-slate-100 text-slate-800 shadow-sm" ||
                   "text-slate-400 hover:text-slate-600"
               ]}
@@ -105,12 +105,12 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
     <div class="flex flex-col gap-6 pb-10">
       <div class="flex items-center gap-3 text-[15px] font-medium text-slate-400">
         <div class="h-px flex-1 bg-slate-200"></div>
-        <span>{format_timestamp(DateTime.utc_now())} – {format_date(Date.utc_today())}</span>
+        <span>{format_timestamp(DateTime.utc_now())} - {format_date(Date.utc_today())}</span>
         <div class="h-px flex-1 bg-slate-200"></div>
       </div>
 
       <div class="text-[20px] leading-8 text-slate-700">
-        I can answer questions about Jump meetings and data – just ask!
+        I can answer questions about Jump meetings and data - just ask!
       </div>
 
       <%= if Enum.empty?(@messages) do %>
@@ -335,7 +335,7 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
 
         <div class="rounded-2xl border border-blue-400/70 bg-white px-3 pb-3 pt-3 shadow-sm">
           <div class="flex items-center">
-            <span class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500">
+            <span class="inline-flex items-center gap-1 rounded-[8px] border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500">
               <span class="font-semibold text-slate-600">@</span>
               Add context
             </span>
@@ -359,7 +359,7 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
               type="submit"
               disabled={@message == "" or @searching}
               class={[
-                "flex h-9 w-9 items-center justify-center rounded-full border",
+                "flex h-9 w-9 items-center justify-center rounded-[8px] border",
                 @message != "" and not @searching &&
                   "border-slate-800 bg-slate-800 text-white" ||
                   "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
@@ -941,9 +941,18 @@ defmodule SocialScribeWeb.MeetingLive.ChatComponent do
   end
 
   defp format_timestamp(datetime) do
-    hour = datetime.hour |> Integer.to_string() |> String.pad_leading(2, "0")
+    hour24 = datetime.hour
     minute = datetime.minute |> Integer.to_string() |> String.pad_leading(2, "0")
-    "#{hour}:#{minute}"
+
+    {hour12, period} =
+      cond do
+        hour24 == 0 -> {12, "am"}
+        hour24 < 12 -> {hour24, "am"}
+        hour24 == 12 -> {12, "pm"}
+        true -> {hour24 - 12, "pm"}
+      end
+
+    "#{hour12}:#{minute} #{period}"
   end
 
   defp parse_message_with_highlights(message_content, contact) do
